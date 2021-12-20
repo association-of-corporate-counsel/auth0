@@ -1,9 +1,11 @@
-Drupal 8 Module for Auth0
+Drupal 9 Module for Auth0
 ====
 
-This plugin replaces standard Drupal 8 login forms with one powered by Auth0 that enables social, passwordless, and enterprise connection login as well as additional security, multifactor auth, and user statistics.
+This project is a manual fork of the [auth0-drupal](https://github.com/auth0-community/auth0-drupal) module. It has been
+made compatible with Drupal 9 for use within ACC sites. It may, at some point, contain code that will make it
+incompatible with sites outside our domain. Please refer to main repo on how to use (or not use) this module. 
 
-Drupal 7 is supported only on v1. If you want to contribute to the codebase, please push your PRs against the `1.x.x` branch. Note that this branch is not regularly maintained.
+This plugin replaces standard Drupal 9 login forms with one powered by Auth0 that enables social, passwordless, and enterprise connection login as well as additional security, multifactor auth, and user statistics.
 
 ## Table of Contents
 
@@ -21,13 +23,6 @@ Before you start, **make sure the admin user has a valid email that you own**. T
 
 There are 2 ways to install this module detailed below. **Please note:** the Auth0 login form will not appear until the module has been configured (see [Getting Started](#getting-started) below).
 
-### Install from Drupal.org manually
-
-1. Go to the [DO Auth0 module page](https://www.drupal.org/project/auth0), scroll to "Downloads," and copy the URL to the latest version's tar.gz file. 
-2. Go to Manage > Extend and click **Install New Module**.
-3. Paste the URL copied into the "Install from a URL" field and click **Install**.
-4. Back on the Modules page, scroll down the the Auth0 module, click the checkbox, then click **Install**.
-
 ### Install from Github
 
 Installing from Github requires Composer ([installation instructions](https://getcomposer.org/doc/00-intro.md)).
@@ -36,7 +31,7 @@ Installing from Github requires Composer ([installation instructions](https://ge
 
 ```bash
 $ cd PATH/TO/DRUPAL/ROOT/modules
-$ git clone https://github.com/auth0/auth0-drupal.git auth0
+$ git clone https://github.com/association-of-corporate-counsel/auth0.git auth0
 ```
 
 2. Move to the newly-created directory and install the Composer dependencies:
@@ -46,17 +41,26 @@ $ cd auth0
 $ composer install
 ```
 
-3. In Manage > Extend, scroll down the the Auth0 module, click the checkbox, then click **Install**
+3. In Manage > Extend, scroll down to the Auth0 module, click the checkbox, then click **Install**
 
 ### Install from Drupal.org with Composer
 
-1. From the root of your Drupal project run:
+1. Add the following to the "repositories" portion of your composer.json file
 
-```bash
-$ composer require drupal/auth0
+```json
+{
+    "type": "vcs",
+    "url": "https://github.com/association-of-corporate-counsel/auth0"
+}
 ```
 
-2. In Manage > Extend, scroll down the the Auth0 module, click the checkbox, then click **Install**
+2. From the root of your Drupal project run:
+
+```bash
+$ composer require acc/auth0_drupal
+```
+
+3. In Manage > Extend, scroll down to the Auth0 module, click the checkbox, then click **Install**
 
 ## Getting Started
 
@@ -116,24 +120,9 @@ Under the **Advanced** tab in the same settings screen, you can configure the fo
 - **Claim for Role Mapping:** Name of the ID token claim to map incoming data from Auth0 to Drupal roles.  
 - **Mapping of Claim Role Values:** Follow the directions below this field to set Drupal roles for users based on incoming Auth0 data.
 
-## Contribution
+## Contribution, Support, Feedback, and Vulnerability Reporting
 
-We appreciate feedback and contribution to this module! Before you get started, please see the following:
-
-- [Auth0's general contribution guidelines](https://github.com/auth0/open-source-template/blob/master/GENERAL-CONTRIBUTING.md)
-- [Auth0's code of conduct guidelines](https://github.com/auth0/open-source-template/blob/master/CODE-OF-CONDUCT.md)
-
-## Support + Feedback
-
-Please use one of the following methods to ask questions or request support:
-
-- Use [Issues](https://github.com/auth0/auth0-drupal/issues) in GitHub for code-level support
-- Use [Community](hhttps://community.auth0.com/tags/drupal) for usage, questions, and specific cases
-- You can also use the [DO support forum](https://www.drupal.org/project/issues/auth0?categories=All)
-
-## Vulnerability Reporting
-
-Please do not report security vulnerabilities on the public GitHub issue tracker. The [Responsible Disclosure Program](https://auth0.com/whitehat) details the procedure for disclosing security issues.
+Please refer to the parent repo ([auth0-drupal](https://github.com/auth0-community/auth0-drupal)).
 
 ## What is Auth0?
 
@@ -150,4 +139,4 @@ Auth0 helps you to easily:
 
 ## License
 
-The Drupal Module for Auth0 is licensed under GPLv2 - [LICENSE](LICENSE)
+The Drupal Module for Auth0 is licensed under MIT - [LICENSE](LICENSE)
