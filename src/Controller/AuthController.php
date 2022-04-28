@@ -683,6 +683,17 @@ class AuthController extends ControllerBase {
       if ($userInfo['email_verified'] || $isDatabaseUser) {
         $joinUser = user_load_by_mail($userInfo['email']);
       }
+      if(!$joinUser){
+        $this->auth0Logger->notice($user_name_used . ' not found by email, trying nf key');
+        // If not found by email, check for NF Key incase user updated their 
+        // email.
+        $users = \Drupal::entityTypeManager()
+          ->getStorage('user')
+          ->loadByProperties([
+            'field_user_sso_nfkey' => explode('|', $userInfo['user_id'])[1],
+          ]);
+        $joinUser = $users ? reset($users) : FALSE;
+      }
     }
     else {
       $this->auth0Logger->notice($user_name_used . ' join user by username');
