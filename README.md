@@ -123,6 +123,7 @@ Under the **Advanced** tab in the same settings screen, you can configure the fo
 - **Mapping of Claims to Profile Fields:** Follow the directions below this field to save incoming Auth0 ID token claims as Drupal profile fields.
 - **Claim for Role Mapping:** Name of the ID token claim to map incoming data from Auth0 to Drupal roles.  
 - **Mapping of Claim Role Values:** Follow the directions below this field to set Drupal roles for users based on incoming Auth0 data.
+- **Logout iframe URLs:** Follow the directions below this field to log out users from other services when they log out from your site.
 
 ## Contribution
 
