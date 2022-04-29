@@ -165,6 +165,17 @@ Drupal roles not listed above will not be changed by this module.
 '),
     ];
 
+    $urlToWhitelist = \Drupal::request()->getSchemeAndHttpHost() . '/user/logout?finishedAuth0Logout=1';
+
+    $form['auth0_logout_iframes_list'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Logout iframe URLs (one per line)'),
+      '#default_value' => $config->get('auth0_logout_iframes_list'),
+      '#description' => $this->t('List the URLs to create iframes for on the logout page. These should point to logout URLs for other sites that a user should get logged out of when they log out of this site. Be sure to add @whitelistUrl to Allowed Logout URLs in your Auth0 settings.', [
+        '@whitelistUrl' => $urlToWhitelist
+      ]),
+    ];
+
     $form['actions']['#type'] = 'actions';
     $form['actions']['submit'] = [
       '#type' => 'submit',
@@ -204,6 +215,7 @@ Drupal roles not listed above will not be changed by this module.
       ->set('auth0_claim_to_use_for_role', $form_state->getValue('auth0_claim_to_use_for_role'))
       ->set('auth0_role_mapping', $form_state->getValue('auth0_role_mapping'))
       ->set('auth0_username_claim', $form_state->getValue('auth0_username_claim'))
+      ->set('auth0_logout_iframes_list', $form_state->getValue('auth0_logout_iframes_list'))
       ->save();
 
     $this->messenger()->addStatus($this->t('Saved!'));
