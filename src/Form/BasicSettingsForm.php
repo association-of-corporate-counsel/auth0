@@ -89,6 +89,26 @@ class BasicSettingsForm extends ConfigFormBase {
       '#description' => $this->t('Your JWT Signing Algorithm for the ID token. RS256 is recommended and must be set in the advanced settings for this client under the OAuth tab.'),
       '#required' => TRUE,
     ];
+    
+    $form['auth0_client_id_js'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Client ID for JS authentication'),
+      '#default_value' => $config->get('auth0_client_id_js'),
+      '#description' => $this->t('Client ID from the Application settings page in your Auth0 dashboard (for JS authentication).'),
+    ];
+    
+    $form['auth0_domain_js'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Domain for JS authentication'),
+      '#default_value' => $config->get('auth0_domain_js'),
+      '#description' => $this->t('Domain from the Application settings page in your Auth0 dashboard (for JS authentication).'),
+    ];
+    
+    $form['auth0_js_enable'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable JS authentication'),
+      '#default_value' => $config->get('auth0_js_enable'),
+    ];
 
     $form['actions']['#type'] = 'actions';
 
@@ -130,6 +150,9 @@ class BasicSettingsForm extends ConfigFormBase {
 
     $config = $this->configFactory()->getEditable('auth0.settings');
     $config->set('auth0_client_id', $form_state->getValue('auth0_client_id'))
+      ->set('auth0_domain_js', $form_state->getValue('auth0_domain_js'))
+      ->set('auth0_client_id_js', $form_state->getValue('auth0_client_id_js'))
+      ->set('auth0_js_enable', $form_state->getValue('auth0_js_enable'))
       ->set('auth0_client_secret', $form_state->getValue('auth0_client_secret'))
       ->set('auth0_domain', $form_state->getValue('auth0_domain'))
       ->set('auth0_custom_domain', $form_state->getValue('auth0_custom_domain'))
