@@ -67,9 +67,11 @@ function auth0_preprocess_html(&$variables) {
   $js_enable = $config->get('auth0_js_enable');
 
   $auth0_client_id_js = $config->get('auth0_client_id_js');
+  $auth0_domain_js = $config->get('auth0_domain_js');
 
   if ($js_enable && $auth0_client_id_js) {
     $variables['#attached']['drupalSettings']['auth0_client_id'] = $auth0_client_id_js;
+    $variables['#attached']['drupalSettings']['auth0_domain'] = $auth0_domain_js;
 
     $variables['#attached']['library'][] = 'auth0/auth0.js_auth';
 

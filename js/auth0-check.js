@@ -2,8 +2,8 @@ let auth0 = null;
 
 const configureClient = async() => {
     auth0 = await createAuth0Client({
-        domain: "auth.acc.com",
-        client_id: "w3UQVkANNiWrecl8qkKEgKuwxkZglIaq",
+        domain: drupalSettings.auth0_domain,
+        client_id: drupalSettings.auth0_client_id,
         redirect_uri: window.location.origin
     });
 };
