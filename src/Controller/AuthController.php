@@ -342,7 +342,9 @@ class AuthController extends ControllerBase {
         ));
       }
 
-      $renderArray = [];
+      $renderArray = [
+        '#title' => 'Logout',
+      ];
       $logout_iframes = explode(PHP_EOL, $logout_iframes);
       foreach ($logout_iframes as $iframe) {
         // Tack on a scheme if it doesn't have one.
@@ -366,6 +368,23 @@ class AuthController extends ControllerBase {
       }
 
       if (sizeof($renderArray) > 0) {
+        $baseMessage = $this->config->get('auth0_logout_page_message');
+        if ($baseMessage == '')  {
+          $baseMessage = $this->t('Logging you out from external services. Please wait.');
+        }
+        $successMessage = $this->config->get('auth0_logout_page_success_message');
+        if ($successMessage == '')  {
+          $successMessage = $this->t('Successfully logged out out from external services. You may now navigate away from this page.');
+        }
+
+        $renderArray[] = [
+          '#type' => 'inline_template',
+          '#template' => '<div id="logout-page-processing-spinner"></div><div id="logout-page-message" data-success-message="{{ successMessage }}">{{ baseMessage }}</div>',
+          '#context' => [
+            'baseMessage' => $baseMessage,
+            'successMessage' => $successMessage,
+          ]
+        ];
         return $renderArray;
       }
     }

@@ -46,4 +46,14 @@ window.addEventListener('DOMContentLoaded', async() =>  {
     if (!isAuthenticatedAuth0 && loggedInToDrupal) {
         window.location.replace(logoutUrl);
     }
+
+    if (window.location.pathname === '/user/logout') {
+        let spinner = document.getElementById('logout-page-processing-spinner'),
+            message = document.getElementById('logout-page-message');
+
+        setTimeout(function() {
+            spinner.style.display = "none";
+            message.textContent = message.dataset.successMessage;
+        }, 3000)
+    }
 });
