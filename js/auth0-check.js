@@ -48,7 +48,7 @@ window.addEventListener('DOMContentLoaded', async() =>  {
     }
 
     if (window.location.pathname === '/user/logout') {
-        let spinner = document.getElementById('logout-page-processing-spinner'),
+        let spinner = document.getElementsByClassName('zn-loader')[0],
             message = document.getElementById('logout-page-message');
 
         setTimeout(function() {

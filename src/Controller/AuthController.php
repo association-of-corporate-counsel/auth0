@@ -379,7 +379,7 @@ class AuthController extends ControllerBase {
 
         $renderArray[] = [
           '#type' => 'inline_template',
-          '#template' => '<div id="logout-page-processing-spinner"></div><div id="logout-page-message" data-success-message="{{ successMessage }}">{{ baseMessage }}</div>',
+          '#template' => '<div class="zn-loader" aria-label="Loading..."></div><div id="logout-page-message" data-success-message="{{ successMessage }}">{{ baseMessage }}</div>',
           '#context' => [
             'baseMessage' => $baseMessage,
             'successMessage' => $successMessage,
