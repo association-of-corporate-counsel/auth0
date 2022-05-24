@@ -1,5 +1,7 @@
 <?php
 
+use Drupal\Core\Form\FormStateInterface;
+
 /**
  * @file
  * Module definition
@@ -69,12 +71,12 @@ function auth0_preprocess_html(&$variables) {
   $auth0_client_id_js = $config->get('auth0_client_id_js');
   $auth0_domain_js = $config->get('auth0_domain_js');
 
-  if ($js_enable && $auth0_client_id_js) {
+  if ($js_enable && $auth0_client_id_js && empty($_SESSION['legacy_login'])) {
     $variables['#attached']['drupalSettings']['auth0_client_id'] = $auth0_client_id_js;
     $variables['#attached']['drupalSettings']['auth0_domain'] = $auth0_domain_js;
 
     $variables['#attached']['library'][] = 'auth0/auth0.js_auth';
-
+    
     $current_user = \Drupal::currentUser();
 
     $roles = $current_user->getRoles();
@@ -82,5 +84,44 @@ function auth0_preprocess_html(&$variables) {
     foreach ($roles as $role) {
       $variables['attributes']['class'][] = 'role--' . $role;
     }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function auth0_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+
+  if ($form_id == 'user_login_form') {
+    array_unshift($form['#validate'], 'auth0_validate_user_form_legacy');
+  }
+}
+
+function auth0_validate_user_form_legacy(array &$form,
+    FormStateInterface $form_state) {
+
+  $values = $form_state->getValues();
+
+  $users = \Drupal::entityTypeManager()
+      ->getStorage('user')
+      ->loadByProperties([
+    'name' => $values['name'],
+  ]);
+
+  $roles = [];
+
+  if ($users) {
+    $user = reset($users);
+
+    $roles = $user->getRoles();
+  }
+
+  if (!$users || !in_array('administrator', $roles)) {
+
+    $form_state->setErrorByName('name',
+        t('You can login only with an administrator account'));
+  }
+  else {
+    $_SESSION['legacy_login'] = 1;
   }
 }
