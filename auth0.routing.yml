@@ -9,7 +9,7 @@ auth0.login:
     _maintenance_access: TRUE
 
 auth0.legacy_login:
-  path: '/user/login/legacy'
+  path: '/drupal-login'
   defaults:
     _form: '\Drupal\user\Form\UserLoginForm'
     _title: 'Log in'

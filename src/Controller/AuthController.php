@@ -24,6 +24,7 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Render\Markup;
 use Drupal\user\UserInterface;
+use Drupal\Component\Utility\UrlHelper;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -61,6 +62,7 @@ class AuthController extends ControllerBase {
   const AUTH0_JWT_SIGNING_ALGORITHM = 'auth0_jwt_signature_alg';
   const AUTH0_SECRET_ENCODED = 'auth0_secret_base64_encoded';
   const AUTH0_OFFLINE_ACCESS = 'auth0_allow_offline_access';
+  const AUTH0_LOGOUT_IFRAME_LIST = 'auth0_logout_iframes_list';
 
   protected $eventDispatcher;
   protected $tempStore;
@@ -179,6 +181,13 @@ class AuthController extends ControllerBase {
   protected Request $currentRequest;
 
   /**
+   * The list of logout iframes.
+   *
+   * @var string
+   */
+  protected string $logoutIframeList;
+
+  /**
    * Initialize the controller.
    *
    * @param \Drupal\Core\TempStore\PrivateTempStoreFactory $temp_store_factory
@@ -233,6 +242,7 @@ class AuthController extends ControllerBase {
     $this->auth0JwtSignatureAlg = $this->config->get(AuthController::AUTH0_JWT_SIGNING_ALGORITHM);
     $this->secretBase64Encoded = FALSE || $this->config->get(AuthController::AUTH0_SECRET_ENCODED);
     $this->offlineAccess = FALSE || $this->config->get(AuthController::AUTH0_OFFLINE_ACCESS);
+    $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) || '';
     $this->httpClient = $http_client;
     $this->auth0 = FALSE;
     $this->database = $database;
@@ -310,18 +320,86 @@ class AuthController extends ControllerBase {
   }
 
   /**
-   * Handles the login page override.
+   * Handles the logout page override.
    *
-   * @return \Drupal\Core\Routing\TrustedRedirectResponse
+   * @return array | \Drupal\Core\Routing\TrustedRedirectResponse
    *   The response after logout.
    */
   public function logout() {
+    
+    if(!empty($_SESSION['legacy_login'])) {
+      user_logout();
+      unset($_SESSION['legacy_login']);
+      return new TrustedRedirectResponse($this->currentRequest->getSchemeAndHttpHost());
+    }
+    
     $auth0Api = new Authentication($this->helper->getAuthDomain(), $this->clientId);
+
+    $ssoLogout = \Drupal::request()->query->get('ssoLogout') ?? '0';
+
+    $logout_iframes = $this->logoutIframeList ?? '';
+    if (strlen($logout_iframes) > 0) {
+      // Log user out of auth0 first, and send them back here to continue
+      // logging out of other services.
+      if ($ssoLogout == '0') {
+        user_logout();
+
+        return new TrustedRedirectResponse($auth0Api->get_logout_link(
+          $this->currentRequest->getSchemeAndHttpHost() . '/user/logout?ssoLogout=1'
+        ));
+      }
+
+      $renderArray = [
+        '#title' => 'Logout',
+      ];
+      $logout_iframes = explode(PHP_EOL, $logout_iframes);
+      foreach ($logout_iframes as $iframe) {
+        // Tack on a scheme if it doesn't have one.
+        if (parse_url($iframe, PHP_URL_SCHEME) == '') {
+          $iframe = 'https://' . $iframe;
+        }
+
+        $iframe = trim($iframe);
+
+        if (UrlHelper::isValid($iframe, TRUE)) {
+          $renderArray[] = [
+            '#type' => 'inline_template',
+            '#template' => '<iframe src="{{ url }}" title="External Site Logout" style="display: none;"></iframe>',
+            '#context' => [
+              'url' => $iframe,
+            ],
+          ];
+        } else {
+          \Drupal::logger('auth0_drupal')->error('iframe logout URL provided is invalid: ' . $iframe);
+        }
+      }
+
+      if (sizeof($renderArray) > 0) {
+        $baseMessage = $this->config->get('auth0_logout_page_message');
+        if ($baseMessage == '')  {
+          $baseMessage = $this->t('Logging you out from external services. Please wait.');
+        }
+        $successMessage = $this->config->get('auth0_logout_page_success_message');
+        if ($successMessage == '')  {
+          $successMessage = $this->t('Successfully logged out out from external services. You may now navigate away from this page.');
+        }
+
+        $renderArray[] = [
+          '#type' => 'inline_template',
+          '#template' => '<div class="zn-loader" aria-label="Loading..."></div><div id="logout-page-message" data-success-message="{{ successMessage }}">{{ baseMessage }}</div>',
+          '#context' => [
+            'baseMessage' => $baseMessage,
+            'successMessage' => $successMessage,
+          ]
+        ];
+        return $renderArray;
+      }
+    }
 
     user_logout();
 
-    // If we are using SSO, we need to logout completely from Auth0,
-    // otherwise they will just logout of their client.
+    // If we are using SSO, we need to log out completely from Auth0,
+    // otherwise they will just log out of their client.
     return new TrustedRedirectResponse($auth0Api->get_logout_link(
       $this->currentRequest->getSchemeAndHttpHost(),
       $this->redirectForSso ? NULL : $this->clientId

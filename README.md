@@ -1,9 +1,13 @@
 Drupal 9 Module for Auth0
 ====
 
-This project is a manual fork of the [auth0-drupal](https://github.com/auth0-community/auth0-drupal) module. It has been
+This project is a manual fork of the (now removed) auth0-community/auth0-drupal module. It has been
 made compatible with Drupal 9 for use within ACC sites. It may, at some point, contain code that will make it
-incompatible with sites outside our domain. Please refer to main repo on how to use (or not use) this module. 
+incompatible with sites outside our domain. 
+
+The parent repository has been made private (or possibly even deleted) by Auth0. Their blog post about this shutdown can
+be found [here](https://community.auth0.com/t/community-repo-deprecation-auth0-drupal/69328). Their recommended
+alternate solution is [Drupal's OIDC module](https://www.drupal.org/project/openid_connect).
 
 This plugin replaces standard Drupal 9 login forms with one powered by Auth0 that enables social, passwordless, and enterprise connection login as well as additional security, multifactor auth, and user statistics.
 
@@ -119,10 +123,20 @@ Under the **Advanced** tab in the same settings screen, you can configure the fo
 - **Mapping of Claims to Profile Fields:** Follow the directions below this field to save incoming Auth0 ID token claims as Drupal profile fields.
 - **Claim for Role Mapping:** Name of the ID token claim to map incoming data from Auth0 to Drupal roles.  
 - **Mapping of Claim Role Values:** Follow the directions below this field to set Drupal roles for users based on incoming Auth0 data.
+- **Logout iframe URLs:** Follow the directions below this field to log out users from other services when they log out from your site.
 
-## Contribution, Support, Feedback, and Vulnerability Reporting
+## Contribution
 
-Please refer to the parent repo ([auth0-drupal](https://github.com/auth0-community/auth0-drupal)).
+We appreciate feedback and contribution to this module!
+
+## Support + Feedback
+
+Please use one of the following methods to ask questions or request support:
+
+- Use [Issues](https://github.com/association-of-corporate-counsel/auth0/issues) in GitHub for code-level support
+- Use [Auth0 Community](hhttps://community.auth0.com/tags/drupal) for usage, questions, and specific cases (Seeing as
+the parent repository has been shut down, anything specific to this module is likely to be ignored or dismissed.)
+- You can also use the [DO support forum](https://www.drupal.org/project/issues/auth0?categories=All)
 
 ## What is Auth0?
 

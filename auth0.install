@@ -69,6 +69,7 @@ function auth0_install() {
     ->set('auth0_claim_mapping', '')
     ->set('auth0_claim_to_use_for_role', '')
     ->set('auth0_role_mapping', '')
+    ->set('auth0_logout_iframes_list', '')
     ->save();
 }
 
