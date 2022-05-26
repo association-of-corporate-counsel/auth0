@@ -242,7 +242,7 @@ class AuthController extends ControllerBase {
     $this->auth0JwtSignatureAlg = $this->config->get(AuthController::AUTH0_JWT_SIGNING_ALGORITHM);
     $this->secretBase64Encoded = FALSE || $this->config->get(AuthController::AUTH0_SECRET_ENCODED);
     $this->offlineAccess = FALSE || $this->config->get(AuthController::AUTH0_OFFLINE_ACCESS);
-    $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) || '';
+    $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) ?? '';
     $this->httpClient = $http_client;
     $this->auth0 = FALSE;
     $this->database = $database;

@@ -3,4 +3,4 @@ description: "Provides single sign on for Drupal pages"
 core_version_requirement: ^8 || ^9
 type: module
 
-version: '2.6.1'
+version: '2.6.2'
