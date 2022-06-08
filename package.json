@@ -1,0 +1,28 @@
+{
+  "name": "acc-auth0-build",
+  "version": "1.0.0",
+  "description": "Drupal 9 Module for Auth0\r ====",
+  "main": "gulpfile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/association-of-corporate-counsel/auth0.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/association-of-corporate-counsel/auth0/issues"
+  },
+  "homepage": "https://github.com/association-of-corporate-counsel/auth0#readme",
+  "devDependencies": {
+    "@babel/core": "^7.18.2",
+    "@babel/preset-env": "^7.18.2",
+    "gulp": "^4.0.2",
+    "gulp-babel": "^8.0.0",
+    "gulp-plumber": "^1.2.1",
+    "gulp-terser": "^2.1.0"
+  },
+  "browserslist": "> 0.25%, not dead"
+}
