@@ -15,4 +15,4 @@ auth0.js_auth:
     js/auth0-check.js: {}
   css:
     component:
-      css/loading-spinner.css: {}
+      css/auth0-style.css: {}
