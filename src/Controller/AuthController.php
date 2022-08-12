@@ -37,10 +37,9 @@ use Drupal\auth0\Exception\EmailNotVerifiedException;
 use Drupal\Core\PageCache\ResponsePolicyInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\auth0\Util\AuthHelper;
-use Auth0\SDK\JWTVerifier;
 use Auth0\SDK\Auth0;
 use Auth0\SDK\API\Authentication;
-use Auth0\SDK\API\Helpers\State\SessionStateHandler;
+use Auth0\SDK\Helpers\TransientStoreHandler;
 use Auth0\SDK\Store\SessionStore;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -54,6 +53,7 @@ class AuthController extends ControllerBase {
 
   const SESSION = 'auth0';
   const STATE = 'state';
+  const HANDLER_STATE = 'webauth_state';
   const AUTH0_LOGGER = 'auth0_controller';
   const AUTH0_DOMAIN = 'auth0_domain';
   const AUTH0_CLIENT_ID = 'auth0_client_id';
@@ -423,12 +423,12 @@ class AuthController extends ControllerBase {
       $this->sessionManager->regenerate();
     }
 
-    $sessionStateHandler = new SessionStateHandler(new SessionStore());
+    $sessionStateHandler = new TransientStoreHandler(new SessionStore());
     $states = $this->tempStore->get(AuthController::STATE);
     if (!is_array($states)) {
       $states = [];
     }
-    $nonce = $sessionStateHandler->issue();
+    $nonce = $sessionStateHandler->issue(AuthController::HANDLER_STATE);
     $states[$nonce] = $returnTo === NULL ? '' : $returnTo;
     $this->tempStore->set(AuthController::STATE, $states);
 
@@ -1131,20 +1131,24 @@ class AuthController extends ControllerBase {
    */
   // phpcs:ignore
   public function verify_email(Request $request) {
+    global $base_root;
+
     $idToken = $request->get('idToken');
 
+    if ($this->auth0 === FALSE) {
+      $this->auth0 = new Auth0([
+        'domain'        => $this->helper->getAuthDomain(),
+        'client_id'     => $this->clientId,
+        'client_secret' => $this->clientSecret,
+        'redirect_uri'  => "$base_root/auth0/callback",
+        'persist_user' => FALSE,
+      ]);
+    }
+
     // Validate the ID Token.
-    $auth0_domain = 'https://' . $this->domain . '/';
-    $auth0_settings = [];
-    $auth0_settings['authorized_iss'] = [$auth0_domain];
-    $auth0_settings['supported_algs'] = [$this->auth0JwtSignatureAlg];
-    $auth0_settings['valid_audiences'] = [$this->clientId];
-    $auth0_settings['client_secret'] = $this->clientSecret;
-    $auth0_settings['secret_base64_encoded'] = $this->secretBase64Encoded;
-    $jwt_verifier = new JWTVerifier($auth0_settings);
 
     try {
-      $user = $jwt_verifier->verifyAndDecode($idToken);
+      $user = $this->auth0->decodeIdToken($idToken);
     }
     catch (\Exception $e) {
       return $this->failLogin($this->t('There was a problem resending the verification email, sorry for the inconvenience.'),

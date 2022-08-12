@@ -7,7 +7,8 @@ namespace Drupal\auth0\Util;
  * Contains \Drupal\auth0\Util\AuthHelper.
  */
 
-use Auth0\SDK\JWTVerifier;
+use Auth0\SDK\Auth0;
+use Auth0\SDK\Exception\InvalidTokenException;
 use Auth0\SDK\API\Authentication;
 use Auth0\SDK\API\Helpers\ApiClient;
 use Auth0\SDK\API\Helpers\InformationHeaders;
@@ -38,6 +39,7 @@ class AuthHelper {
   private $redirectForSso;
   private $auth0JwtSignatureAlg;
   private $secretBase64Encoded;
+  private $auth0;
 
   /**
    * Initialize the Helper.
@@ -51,6 +53,8 @@ class AuthHelper {
     LoggerChannelFactoryInterface $logger_factory,
     ConfigFactoryInterface $config_factory
   ) {
+    global $base_root;
+
     $this->logger = $logger_factory->get(AuthHelper::AUTH0_LOGGER);
     $this->config = $config_factory->get('auth0.settings');
     $this->domain = $this->config->get(AuthHelper::AUTH0_DOMAIN);
@@ -63,6 +67,15 @@ class AuthHelper {
       AUTH0_DEFAULT_SIGNING_ALGORITHM
     );
     $this->secretBase64Encoded = FALSE || $this->config->get(AuthHelper::AUTH0_SECRET_ENCODED);
+
+    $this->auth0 = new Auth0([
+      'domain'                => $this->domain,
+      'client_id'             => $this->clientId,
+      'client_secret'         => $this->clientSecret,
+      'redirect_uri'          => "$base_root/auth0/callback",
+      'id_token_alg'          => $this->auth0JwtSignatureAlg,
+      'secret_base64_encoded' => $this->secretBase64Encoded,
+    ]);
 
     self::setTelemetry();
   }
@@ -106,23 +119,14 @@ class AuthHelper {
    * @param string $idToken
    *   The ID token to validate.
    *
-   * @return mixed
+   * @return array
    *   A user array of named claims from the ID token.
    *
-   * @throws CoreException
    * @throws InvalidTokenException
    * @throws \Exception
    */
-  public function validateIdToken($idToken) {
-    $auth0_domain = 'https://' . $this->getAuthDomain() . '/';
-    $auth0_settings = [];
-    $auth0_settings['authorized_iss'] = [$auth0_domain];
-    $auth0_settings['supported_algs'] = [$this->auth0JwtSignatureAlg];
-    $auth0_settings['valid_audiences'] = [$this->clientId];
-    $auth0_settings['client_secret'] = $this->clientSecret;
-    $auth0_settings['secret_base64_encoded'] = $this->secretBase64Encoded;
-    $jwt_verifier = new JWTVerifier($auth0_settings);
-    return $jwt_verifier->verifyAndDecode($idToken);
+  public function validateIdToken(string $idToken): array {
+    return $this->auth0->decodeIdToken($idToken);
   }
 
   /**
@@ -132,7 +136,6 @@ class AuthHelper {
     $oldInfoHeaders = ApiClient::getInfoHeadersData();
     if ($oldInfoHeaders) {
       $infoHeaders = InformationHeaders::Extend($oldInfoHeaders);
-      $infoHeaders->setEnvironment('drupal', \Drupal::VERSION);
       $infoHeaders->setPackage('auth0-drupal', AUTH0_MODULE_VERSION);
       ApiClient::setInfoHeadersData($infoHeaders);
     }
