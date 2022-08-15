@@ -40,7 +40,7 @@ use Drupal\auth0\Util\AuthHelper;
 use Auth0\SDK\Auth0;
 use Auth0\SDK\API\Authentication;
 use Auth0\SDK\Helpers\TransientStoreHandler;
-use Auth0\SDK\Store\SessionStore;
+use Auth0\SDK\Store\CookieStore;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -53,7 +53,6 @@ class AuthController extends ControllerBase {
 
   const SESSION = 'auth0';
   const STATE = 'state';
-  const HANDLER_STATE = 'webauth_state';
   const AUTH0_LOGGER = 'auth0_controller';
   const AUTH0_DOMAIN = 'auth0_domain';
   const AUTH0_CLIENT_ID = 'auth0_client_id';
@@ -188,6 +187,13 @@ class AuthController extends ControllerBase {
   protected string $logoutIframeList;
 
   /**
+   * The transient cookie store.
+   *
+   * @var CookieStore
+   */
+  protected CookieStore $transientStore;
+
+  /**
    * Initialize the controller.
    *
    * @param \Drupal\Core\TempStore\PrivateTempStoreFactory $temp_store_factory
@@ -223,6 +229,7 @@ class AuthController extends ControllerBase {
     Connection $database,
     RequestStack $request_stack
   ) {
+    global $base_root;
     // Ensure the pages this controller servers never gets cached.
     $page_cache->trigger();
 
@@ -244,7 +251,19 @@ class AuthController extends ControllerBase {
     $this->offlineAccess = FALSE || $this->config->get(AuthController::AUTH0_OFFLINE_ACCESS);
     $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) ?? '';
     $this->httpClient = $http_client;
-    $this->auth0 = FALSE;
+    $this->transientStore = new CookieStore([
+      // Needs this prefix or Pantheon will discard that cookie.
+      // https://pantheon.io/docs/cookies#why-isnt-my-cookie-being-savedretrieved
+      'base_name' => 'STYXKEY_auth0_',
+    ]);
+    $this->auth0 = new Auth0([
+      'domain'          => $this->helper->getAuthDomain(),
+      'client_id'       => $this->clientId,
+      'client_secret'   => $this->clientSecret,
+      'redirect_uri'    => "$base_root/auth0/callback",
+      'persist_user'    => FALSE,
+      'transient_store' => $this->transientStore,
+    ]);
     $this->database = $database;
     $this->currentRequest = $request_stack->getCurrentRequest();
   }
@@ -289,7 +308,7 @@ class AuthController extends ControllerBase {
 
     // If supporting SSO, redirect to the hosted login page for authorization.
     if ($this->redirectForSso) {
-      return new TrustedRedirectResponse($this->buildAuthorizeUrl(NULL, $returnTo));
+      return new TrustedRedirectResponse($this->buildAuthorizeUrl($returnTo));
     }
 
     /* Not doing SSO, so show login page */
@@ -423,12 +442,12 @@ class AuthController extends ControllerBase {
       $this->sessionManager->regenerate();
     }
 
-    $sessionStateHandler = new TransientStoreHandler(new SessionStore());
+    $transientStoreHandler = new TransientStoreHandler($this->transientStore);
     $states = $this->tempStore->get(AuthController::STATE);
     if (!is_array($states)) {
       $states = [];
     }
-    $nonce = $sessionStateHandler->issue(AuthController::HANDLER_STATE);
+    $nonce = $transientStoreHandler->issue(AuthController::STATE);
     $states[$nonce] = $returnTo === NULL ? '' : $returnTo;
     $this->tempStore->set(AuthController::STATE, $states);
 
@@ -438,35 +457,29 @@ class AuthController extends ControllerBase {
   /**
    * Build the Authorize url.
    *
-   * @param null|string $prompt
-   *   If prompt=none should be passed, false if not.
    * @param string $returnTo
    *   Local path|null if null, use default of /user.
    *
    * @return string
    *   The URL to redirect to for authorization.
    */
-  protected function buildAuthorizeUrl($prompt, $returnTo = NULL) {
+  protected function buildAuthorizeUrl($returnTo = NULL) {
     global $base_root;
 
-    $auth0Api = new Authentication($this->helper->getAuthDomain(), $this->clientId);
-
-    $response_type = 'code';
-    $redirect_uri = "$base_root/auth0/callback";
-    $connection = NULL;
-    $state = $this->getNonce($returnTo);
-    $additional_params = [];
-    $additional_params['scope'] = AUTH0_DEFAULT_SCOPES;
+    $scope = AUTH0_DEFAULT_SCOPES;
 
     if ($this->offlineAccess) {
-      $additional_params['scope'] .= ' offline_access';
+      $scope .= ' offline_access';
     }
 
-    if ($prompt) {
-      $additional_params['prompt'] = $prompt;
-    }
-
-    return $auth0Api->get_authorize_link($response_type, $redirect_uri, $connection, $state, $additional_params);
+    return $this->auth0->getLoginUrl([
+      'client_id' => $this->clientId,
+      'response_type' => 'code',
+      'redirect_uri' => "$base_root/auth0/callback",
+      'connection' => NULL,
+      'state' => $this->getNonce($returnTo),
+      'scope' => $scope,
+    ]);
   }
 
   /**
@@ -493,7 +506,7 @@ class AuthController extends ControllerBase {
       'consent_required',
     ];
     if ($error_code && in_array($error_code, $redirect_errors)) {
-      return new TrustedRedirectResponse($this->buildAuthorizeUrl(FALSE, $returnTo));
+      return new TrustedRedirectResponse($this->buildAuthorizeUrl($returnTo));
     }
     elseif ($error_code) {
       $error_desc = $request->query->get('error_description', $request->request->get('error_description', $error_code));
@@ -516,22 +529,12 @@ class AuthController extends ControllerBase {
    *   The Auth0 exception.
    */
   public function callback(Request $request) {
-    global $base_root;
     $problem_logging_in_msg = $this->t('There was a problem logging you in, sorry for the inconvenience.');
 
     $response = $this->checkForError($request, NULL);
     if ($response !== NULL) {
       return $response;
     }
-
-    // Set store to null so that the store is set to SessionStore.
-    $this->auth0 = new Auth0([
-      'domain'        => $this->helper->getAuthDomain(),
-      'client_id'     => $this->clientId,
-      'client_secret' => $this->clientSecret,
-      'redirect_uri'  => "$base_root/auth0/callback",
-      'persist_user' => FALSE,
-    ]);
 
     $refreshToken = NULL;
 
@@ -581,13 +584,13 @@ class AuthController extends ControllerBase {
         $userInfo['user_id'] = $userInfo['sub'];
       }
 
-      if ($userInfo['sub'] != $user->sub) {
+      if ($userInfo['sub'] != $user['sub']) {
         return $this->failLogin($problem_logging_in_msg, $this->t('Failed to verify JWT sub'));
       }
 
       $this->auth0Logger->notice('Good Login');
 
-      return $this->processUserLogin($request, $userInfo, $idToken, $refreshToken, $user->exp, $returnTo);
+      return $this->processUserLogin($request, $userInfo, $idToken, $refreshToken, $user['exp'], $returnTo);
     }
     else {
       return $this->failLogin($problem_logging_in_msg, 'No userinfo found');
@@ -1131,19 +1134,7 @@ class AuthController extends ControllerBase {
    */
   // phpcs:ignore
   public function verify_email(Request $request) {
-    global $base_root;
-
     $idToken = $request->get('idToken');
-
-    if ($this->auth0 === FALSE) {
-      $this->auth0 = new Auth0([
-        'domain'        => $this->helper->getAuthDomain(),
-        'client_id'     => $this->clientId,
-        'client_secret' => $this->clientSecret,
-        'redirect_uri'  => "$base_root/auth0/callback",
-        'persist_user' => FALSE,
-      ]);
-    }
 
     // Validate the ID Token.
 
