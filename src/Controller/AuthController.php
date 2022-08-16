@@ -189,9 +189,9 @@ class AuthController extends ControllerBase {
   /**
    * The transient cookie store.
    *
-   * @var CookieStore
+   * @var ?CookieStore
    */
-  protected CookieStore $transientStore;
+  protected ?CookieStore $transientStore;
 
   /**
    * Initialize the controller.
@@ -251,11 +251,15 @@ class AuthController extends ControllerBase {
     $this->offlineAccess = FALSE || $this->config->get(AuthController::AUTH0_OFFLINE_ACCESS);
     $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) ?? '';
     $this->httpClient = $http_client;
-    $this->transientStore = new CookieStore([
-      // Needs this prefix or Pantheon will discard that cookie.
-      // https://pantheon.io/docs/cookies#why-isnt-my-cookie-being-savedretrieved
-      'base_name' => 'STYXKEY_auth0_',
-    ]);
+    $this->transientStore = NULL;
+    if (isset($_ENV["PANTHEON_ENVIRONMENT"])) {
+      $this->transientStore = new CookieStore([
+        // Needs this prefix or Pantheon will discard that cookie.
+        // https://pantheon.io/docs/cookies#why-isnt-my-cookie-being-savedretrieved
+        'base_name' => 'STYXKEY_auth0_',
+      ]);
+    }
+
     $this->auth0 = new Auth0([
       'domain'          => $this->helper->getAuthDomain(),
       'client_id'       => $this->clientId,
