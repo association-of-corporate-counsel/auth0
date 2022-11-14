@@ -21,7 +21,9 @@ function auth0LoadingLockdown(message) {
 
 // Will run when page finishes loading the DOM.
 window.addEventListener('DOMContentLoaded', async() =>  {
-    const loginUrl = window.location.origin + "/user/login?returnTo=" + window.location.pathname;
+    const params = new URLSearchParams();
+    params.append('returnTo', window.location.pathname + window.location.search);
+    const loginUrl = window.location.origin + "/user/login?" + params.toString();
     const logoutUrl = window.location.origin + "/user/logout";
 
     // Check Drupal login status.
