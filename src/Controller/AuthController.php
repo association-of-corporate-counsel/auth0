@@ -694,7 +694,7 @@ class AuthController extends ControllerBase {
     user_login_finalize($user);
 
     if ($returnTo) {
-      return new RedirectResponse($returnTo);
+      return new RedirectResponse(urldecode($returnTo));
     }
     elseif ($request->request->has('destination')) {
       return new RedirectResponse($request->request->get('destination'));
