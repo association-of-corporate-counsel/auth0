@@ -11,7 +11,7 @@ auth0.js_auth:
   version: 1.x
   header: true
   js:
-    https://cdn.auth0.com/js/auth0-spa-js/1.21/auth0-spa-js.production.js: {}
+    https://cdn.auth0.com/js/auth0-spa-js/1.21/auth0-spa-js.production.js: {attributes: { integrity: "sha384-6JE1NL/uTb8ceGFEsq5UZ+nr7VL5mJ1neBuVbHI9kFgVkvOeJ58Vgv8Ud00+opd/", crossorigin: 'anonymous' }}
     js/auth0-check.js: {}
   css:
     component:
