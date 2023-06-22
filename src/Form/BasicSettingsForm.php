@@ -58,7 +58,7 @@ class BasicSettingsForm extends ConfigFormBase {
     $form['auth0_client_id'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Client ID'),
-      '#default_value' => $config->get('auth0_client_id'),
+      '#default_value' => 'secrets.json',
       '#description' => $this->t('Client ID from the Application settings page in your Auth0 dashboard.'),
       '#required' => TRUE,
     ];
@@ -66,7 +66,7 @@ class BasicSettingsForm extends ConfigFormBase {
     $form['auth0_client_secret'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Client Secret'),
-      '#default_value' => $config->get('auth0_client_secret'),
+      '#default_value' => 'secrets.json',
       '#description' => $this->t('Client Secret from the Application settings page in your Auth0 dashboard.'),
       '#required' => TRUE,
     ];
@@ -93,7 +93,7 @@ class BasicSettingsForm extends ConfigFormBase {
     $form['auth0_client_id_js'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Client ID for JS authentication'),
-      '#default_value' => $config->get('auth0_client_id_js'),
+      '#default_value' => 'secrets.json',
       '#description' => $this->t('Client ID from the Application settings page in your Auth0 dashboard (for JS authentication).'),
     ];
     
@@ -149,11 +149,8 @@ class BasicSettingsForm extends ConfigFormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
 
     $config = $this->configFactory()->getEditable('auth0.settings');
-    $config->set('auth0_client_id', $form_state->getValue('auth0_client_id'))
-      ->set('auth0_domain_js', $form_state->getValue('auth0_domain_js'))
-      ->set('auth0_client_id_js', $form_state->getValue('auth0_client_id_js'))
+    $config->set('auth0_domain_js', $form_state->getValue('auth0_domain_js'))
       ->set('auth0_js_enable', $form_state->getValue('auth0_js_enable'))
-      ->set('auth0_client_secret', $form_state->getValue('auth0_client_secret'))
       ->set('auth0_domain', $form_state->getValue('auth0_domain'))
       ->set('auth0_custom_domain', $form_state->getValue('auth0_custom_domain'))
       ->set(AuthHelper::AUTH0_JWT_SIGNING_ALGORITHM, $form_state->getValue(AuthHelper::AUTH0_JWT_SIGNING_ALGORITHM))
