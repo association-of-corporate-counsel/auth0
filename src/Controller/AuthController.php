@@ -6,7 +6,6 @@ namespace Drupal\auth0\Controller;
  * @file
  * Contains \Drupal\auth0\Controller\AuthController.
  */
-
 // Create a variable to store the path to this module.
 // Load vendor files if they exist.
 define('AUTH0_PATH', drupal_get_path('module', 'auth0'));
@@ -38,11 +37,13 @@ use Drupal\Core\PageCache\ResponsePolicyInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\auth0\Util\AuthHelper;
 use Auth0\SDK\Auth0;
-use Auth0\SDK\API\Authentication;
-use Auth0\SDK\Helpers\TransientStoreHandler;
+///use Auth0\SDK\API\Authentication;
+use Auth0\SDK\Utility\TransientStoreHandler;
+use Auth0\SDK\Configuration\SdkConfiguration;
 use Auth0\SDK\Store\CookieStore;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
 
 /**
  * Controller routines for auth0 authentication.
@@ -218,16 +219,13 @@ class AuthController extends ControllerBase {
    *   Request Stack.
    */
   public function __construct(
-    PrivateTempStoreFactory $temp_store_factory,
-    SessionManagerInterface $session_manager,
-    ResponsePolicyInterface $page_cache,
-    LoggerChannelFactoryInterface $logger_factory,
-    EventDispatcherInterface $event_dispatcher,
-    ConfigFactoryInterface $config_factory,
-    AuthHelper $auth0_helper,
-    Client $http_client,
-    Connection $database,
-    RequestStack $request_stack
+      PrivateTempStoreFactory $temp_store_factory,
+      SessionManagerInterface $session_manager,
+      ResponsePolicyInterface $page_cache,
+      LoggerChannelFactoryInterface $logger_factory,
+      EventDispatcherInterface $event_dispatcher,
+      ConfigFactoryInterface $config_factory, AuthHelper $auth0_helper,
+      Client $http_client, Connection $database, RequestStack $request_stack
   ) {
     global $base_root;
     // Ensure the pages this controller servers never gets cached.
@@ -250,24 +248,39 @@ class AuthController extends ControllerBase {
     $this->secretBase64Encoded = FALSE || $this->config->get(AuthController::AUTH0_SECRET_ENCODED);
     $this->offlineAccess = FALSE || $this->config->get(AuthController::AUTH0_OFFLINE_ACCESS);
     $this->logoutIframeList = $this->config->get(AuthController::AUTH0_LOGOUT_IFRAME_LIST) ?? '';
-    $this->httpClient = $http_client;
-    $this->transientStore = NULL;
-    if (isset($_ENV["PANTHEON_ENVIRONMENT"])) {
-      $this->transientStore = new CookieStore([
-        // Needs this prefix or Pantheon will discard that cookie.
-        // https://pantheon.io/docs/cookies#why-isnt-my-cookie-being-savedretrieved
-        'base_name' => 'STYXKEY_auth0_',
-      ]);
-    }
+    $this->httpClient = new GuzzleAdapter($http_client);
 
-    $this->auth0 = new Auth0([
-      'domain'          => $this->helper->getAuthDomain(),
-      'client_id'       => $this->clientId,
-      'client_secret'   => $this->clientSecret,
-      'redirect_uri'    => "$base_root/auth0/callback",
-      'persist_user'    => FALSE,
-      'transient_store' => $this->transientStore,
-    ]);
+    $sdk_configuration = new SdkConfiguration(
+        strategy: SdkConfiguration::STRATEGY_REGULAR,
+        domain: $this->helper->getAuthDomain(), clientId: $this->clientId,
+        clientSecret: $this->clientSecret,
+        redirectUri: "$base_root/auth0/callback", persistUser: TRUE,
+        persistIdToken: TRUE, httpClient: $this->httpClient,
+        cookieSecret: $this->helper->getCookieSecret(),
+        usePkce: FALSE,
+        /*
+          // Specify a PSR-18 HTTP client factory:
+          httpClient: $httpClient
+
+          // Specify PSR-17 request/response factories:
+          httpRequestFactory: $httpFactory
+          httpResponseFactory: $httpFactory
+          httpStreamFactory: $httpFactory */
+    );
+
+    $sdk_configuration->pushScope('offline_access');
+
+    $this->transientStore = new CookieStore(configuration: $sdk_configuration,
+        namespace: 'STYXKEY_auth0_');
+
+    $cs = new CookieStore(configuration: $sdk_configuration,
+        namespace: 'STYXKEY_auth0_');
+
+    $sdk_configuration->setTransientStorage($this->transientStore);
+    $sdk_configuration->setSessionStorage($cs);
+
+    $this->auth0 = new Auth0($sdk_configuration);
+
     $this->database = $database;
     $this->currentRequest = $request_stack->getCurrentRequest();
   }
@@ -277,16 +290,13 @@ class AuthController extends ControllerBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('tempstore.private'),
-      $container->get('session_manager'),
-      $container->get('page_cache_kill_switch'),
-      $container->get('logger.factory'),
-      $container->get('event_dispatcher'),
-      $container->get('config.factory'),
-      $container->get('auth0.helper'),
-      $container->get('http_client'),
-      $container->get('database'),
-      $container->get('request_stack')
+        $container->get('tempstore.private'),
+        $container->get('session_manager'),
+        $container->get('page_cache_kill_switch'),
+        $container->get('logger.factory'), $container->get('event_dispatcher'),
+        $container->get('config.factory'), $container->get('auth0.helper'),
+        $container->get('http_client'), $container->get('database'),
+        $container->get('request_stack')
     );
   }
 
@@ -308,34 +318,36 @@ class AuthController extends ControllerBase {
       $lockExtraSettings = "{}";
     }
 
-    $returnTo = $request->request->get('returnTo', $request->query->get('returnTo', NULL));
+    $returnTo = $request->request->get('returnTo',
+        $request->query->get('returnTo', NULL));
 
     // If supporting SSO, redirect to the hosted login page for authorization.
     if ($this->redirectForSso) {
-      return new TrustedRedirectResponse($this->buildAuthorizeUrl($returnTo));
+      $authorizeUrl = $this->buildAuthorizeUrl($returnTo);
+      return new TrustedRedirectResponse($authorizeUrl);
     }
 
     /* Not doing SSO, so show login page */
     return [
-      '#theme' => 'auth0_login',
+      '#theme'    => 'auth0_login',
       '#loginCSS' => $this->config->get('auth0_login_css'),
       '#attached' => [
-        'library' => [
+        'library'        => [
           'auth0/auth0.lock',
         ],
         'drupalSettings' => [
           'auth0' => [
-            'clientId' => $this->config->get('auth0_client_id'),
-            'domain' => $this->helper->getAuthDomain(),
-            'lockExtraSettings' => $lockExtraSettings,
+            'clientId'             => $this->config->get('auth0_client_id'),
+            'domain'               => $this->helper->getAuthDomain(),
+            'lockExtraSettings'    => $lockExtraSettings,
             'configurationBaseUrl' => $this->helper->getTenantCdn($this->config->get('auth0_domain')),
-            'showSignup' => $this->config->get('auth0_allow_signup'),
-            'callbackURL' => "$base_root/auth0/callback",
-            'state' => $this->getNonce($returnTo),
-            'scopes' => AUTH0_DEFAULT_SCOPES,
-            'offlineAccess' => $this->offlineAccess,
-            'formTitle' => $this->config->get('auth0_form_title'),
-            'jsonErrorMsg' => $this->t('There was an error parsing the "Lock extra settings" field.'),
+            'showSignup'           => $this->config->get('auth0_allow_signup'),
+            'callbackURL'          => "$base_root/auth0/callback",
+            'state'                => $this->getNonce($returnTo),
+            'scopes'               => AUTH0_DEFAULT_SCOPES,
+            'offlineAccess'        => $this->offlineAccess,
+            'formTitle'            => $this->config->get('auth0_form_title'),
+            'jsonErrorMsg'         => $this->t('There was an error parsing the "Lock extra settings" field.'),
           ],
         ],
       ],
@@ -349,14 +361,12 @@ class AuthController extends ControllerBase {
    *   The response after logout.
    */
   public function logout() {
-    
-    if(!empty($_SESSION['legacy_login'])) {
+
+    if (!empty($_SESSION['legacy_login'])) {
       user_logout();
       unset($_SESSION['legacy_login']);
       return new TrustedRedirectResponse($this->currentRequest->getSchemeAndHttpHost());
     }
-    
-    $auth0Api = new Authentication($this->helper->getAuthDomain(), $this->clientId);
 
     $ssoLogout = \Drupal::request()->query->get('ssoLogout') ?? '0';
 
@@ -367,8 +377,8 @@ class AuthController extends ControllerBase {
       if ($ssoLogout == '0') {
         user_logout();
 
-        return new TrustedRedirectResponse($auth0Api->get_logout_link(
-          $this->currentRequest->getSchemeAndHttpHost() . '/user/logout?ssoLogout=1'
+        return new TrustedRedirectResponse($this->auth0->logout(
+                returnUri: $this->currentRequest->getSchemeAndHttpHost() . '/user/logout?ssoLogout=1'
         ));
       }
 
@@ -386,32 +396,33 @@ class AuthController extends ControllerBase {
 
         if (UrlHelper::isValid($iframe, TRUE)) {
           $renderArray[] = [
-            '#type' => 'inline_template',
+            '#type'     => 'inline_template',
             '#template' => '<iframe src="{{ url }}" title="External Site Logout" style="display: none;"></iframe>',
-            '#context' => [
+            '#context'  => [
               'url' => $iframe,
             ],
           ];
-        } else {
+        }
+        else {
           \Drupal::logger('auth0_drupal')->error('iframe logout URL provided is invalid: ' . $iframe);
         }
       }
 
       if (sizeof($renderArray) > 0) {
         $baseMessage = $this->config->get('auth0_logout_page_message');
-        if ($baseMessage == '')  {
+        if ($baseMessage == '') {
           $baseMessage = $this->t('Logging you out from external services. Please wait.');
         }
         $successMessage = $this->config->get('auth0_logout_page_success_message');
-        if ($successMessage == '')  {
+        if ($successMessage == '') {
           $successMessage = $this->t('Successfully logged out out from external services. You may now navigate away from this page.');
         }
 
         $renderArray[] = [
-          '#type' => 'inline_template',
+          '#type'     => 'inline_template',
           '#template' => '<div class="zn-loader" aria-label="Loading..."></div><div id="logout-page-message" data-success-message="{{ successMessage }}">{{ baseMessage }}</div>',
-          '#context' => [
-            'baseMessage' => $baseMessage,
+          '#context'  => [
+            'baseMessage'    => $baseMessage,
             'successMessage' => $successMessage,
           ]
         ];
@@ -423,9 +434,15 @@ class AuthController extends ControllerBase {
 
     // If we are using SSO, we need to log out completely from Auth0,
     // otherwise they will just log out of their client.
-    return new TrustedRedirectResponse($auth0Api->get_logout_link(
-      $this->currentRequest->getSchemeAndHttpHost(),
-      $this->redirectForSso ? NULL : $this->clientId
+    $params = [];
+
+    if (!$this->redirectForSso) {
+      $params['client_id'] = $this->clientId;
+    }
+
+    return new TrustedRedirectResponse($this->auth0->logout(
+            returnUri: $this->currentRequest->getSchemeAndHttpHost(),
+            params: $params,
     ));
   }
 
@@ -476,14 +493,19 @@ class AuthController extends ControllerBase {
       $scope .= ' offline_access';
     }
 
-    return $this->auth0->getLoginUrl([
-      'client_id' => $this->clientId,
-      'response_type' => 'code',
-      'redirect_uri' => "$base_root/auth0/callback",
-      'connection' => NULL,
-      'state' => $this->getNonce($returnTo),
-      'scope' => $scope,
-    ]);
+    $login_link = $this->auth0->login(
+        redirectUrl: "$base_root/auth0/callback",
+        params: [
+          'client_id'     => $this->clientId,
+          'response_type' => 'code',
+          'redirect_uri'  => "$base_root/auth0/callback",
+          'connection'    => NULL,
+          'state'         => $this->getNonce($returnTo),
+          'scope'         => $scope,
+        ]
+    );
+
+    return $login_link;
   }
 
   /**
@@ -513,7 +535,8 @@ class AuthController extends ControllerBase {
       return new TrustedRedirectResponse($this->buildAuthorizeUrl($returnTo));
     }
     elseif ($error_code) {
-      $error_desc = $request->query->get('error_description', $request->request->get('error_description', $error_code));
+      $error_desc = $request->query->get('error_description',
+          $request->request->get('error_description', $error_code));
       return $this->failLogin($error_msg . ':  ' . $error_desc, $error_desc);
     }
 
@@ -533,12 +556,15 @@ class AuthController extends ControllerBase {
    *   The Auth0 exception.
    */
   public function callback(Request $request) {
+
     $problem_logging_in_msg = $this->t('There was a problem logging you in, sorry for the inconvenience.');
 
     $response = $this->checkForError($request, NULL);
     if ($response !== NULL) {
       return $response;
     }
+
+    $this->auth0->exchange();
 
     $refreshToken = NULL;
 
@@ -549,8 +575,9 @@ class AuthController extends ControllerBase {
     }
     catch (\Exception $e) {
       return $this->failLogin(
-        $problem_logging_in_msg,
-        $this->t('Failed to exchange code for tokens: @exception', ['@exception' => $e->getMessage()])
+              $problem_logging_in_msg,
+              $this->t('Failed to exchange code for tokens: @exception',
+                  ['@exception' => $e->getMessage()])
       );
     }
 
@@ -560,7 +587,8 @@ class AuthController extends ControllerBase {
       }
       catch (\Exception $e) {
         // Do NOT fail here, just log the error.
-        $this->auth0Logger->warning($this->t('Failed getting refresh token: @exception', ['@exception' => $e->getMessage()]));
+        $this->auth0Logger->warning($this->t('Failed getting refresh token: @exception',
+                ['@exception' => $e->getMessage()]));
       }
     }
 
@@ -568,7 +596,9 @@ class AuthController extends ControllerBase {
       $user = $this->helper->validateIdToken($idToken);
     }
     catch (\Exception $e) {
-      return $this->failLogin($problem_logging_in_msg, $this->t('Failed to validate JWT: @exception', ['@exception' => $e->getMessage()]));
+      return $this->failLogin($problem_logging_in_msg,
+              $this->t('Failed to validate JWT: @exception',
+                  ['@exception' => $e->getMessage()]));
     }
 
     // State value is validated in $this->auth0->getUser() above.
@@ -589,12 +619,14 @@ class AuthController extends ControllerBase {
       }
 
       if ($userInfo['sub'] != $user['sub']) {
-        return $this->failLogin($problem_logging_in_msg, $this->t('Failed to verify JWT sub'));
+        return $this->failLogin($problem_logging_in_msg,
+                $this->t('Failed to verify JWT sub'));
       }
 
       $this->auth0Logger->notice('Good Login');
 
-      return $this->processUserLogin($request, $userInfo, $idToken, $refreshToken, $user['exp'], $returnTo);
+      return $this->processUserLogin($request, $userInfo, $idToken,
+              $refreshToken, $user['exp'], $returnTo);
     }
     else {
       return $this->failLogin($problem_logging_in_msg, 'No userinfo found');
@@ -647,8 +679,8 @@ class AuthController extends ControllerBase {
    * @throws \Exception
    *   An exception.
    */
-  protected function processUserLogin(Request $request, array $userInfo, $idToken, $refreshToken, $expiresAt, $returnTo) {
-    $this->auth0Logger->notice('process user login');
+  protected function processUserLogin(Request $request, array $userInfo,
+      $idToken, $refreshToken, $expiresAt, $returnTo) {
 
     $event = new Auth0UserPreLoginEvent($userInfo);
     $this->eventDispatcher->dispatch(Auth0UserPreLoginEvent::NAME, $event);
@@ -662,6 +694,8 @@ class AuthController extends ControllerBase {
       $user = $this->findAuth0User($userInfo['user_id']);
 
       if ($user) {
+        $user->setEmail($userInfo['email']);
+        $user->save();
         $this->auth0Logger->notice('uid of existing Drupal user found');
 
         // User exists, update the auth0_user with the new userInfo object.
@@ -670,7 +704,8 @@ class AuthController extends ControllerBase {
         // Update field and role mappings.
         $this->auth0UpdateFieldsAndRoles($userInfo, $user);
 
-        $event = new Auth0UserSigninEvent($user, $userInfo, $refreshToken, $expiresAt);
+        $event = new Auth0UserSigninEvent($user, $userInfo, $refreshToken,
+            $expiresAt);
         $this->eventDispatcher->dispatch(Auth0UserSigninEvent::NAME, $event);
       }
       else {
@@ -685,7 +720,8 @@ class AuthController extends ControllerBase {
       }
     }
     catch (EmailNotSetException $e) {
-      return $this->failLogin($this->t('This account does not have an email associated. Please login with a different provider.'), 'No Email Found');
+      return $this->failLogin($this->t('This account does not have an email associated. Please login with a different provider.'),
+              'No Email Found');
     }
     catch (EmailNotVerifiedException $e) {
       return $this->auth0FailWithVerifyEmail($idToken);
@@ -738,7 +774,7 @@ class AuthController extends ControllerBase {
    *   The email not verified exception.
    * @throws \Exception
    */
-  protected function signupUser(array $userInfo, $idToken = '') {
+  protected function signupUser(array $userInfo) {
     // If the user doesn't exist we need to either create a new one,
     // or assign them to an existing one.
     $isDatabaseUser = FALSE;
@@ -755,9 +791,8 @@ class AuthController extends ControllerBase {
     $user_name_claim = $this->config->get('auth0_username_claim') ?: AUTH0_DEFAULT_USERNAME_CLAIM;
 
     // Drupal usernames do not allow pipe characters.
-    $user_name_used = !empty($userInfo[$user_name_claim])
-      ? $userInfo[$user_name_claim]
-      : str_replace('|', '_', $userInfo['user_id']);
+    $user_name_used = !empty($userInfo[$user_name_claim]) ? $userInfo[$user_name_claim]
+          : str_replace('|', '_', $userInfo['user_id']);
 
     if ($this->config->get('auth0_join_user_by_mail_enabled') && !empty($userInfo['email'])) {
       $this->auth0Logger->notice($userInfo['email'] . ' join user by mail is enabled, looking up user by email');
@@ -767,6 +802,21 @@ class AuthController extends ControllerBase {
       // verified email.
       if ($userInfo['email_verified'] || $isDatabaseUser) {
         $joinUser = user_load_by_mail($userInfo['email']);
+      }
+      if (!$joinUser) {
+        $this->auth0Logger->notice($user_name_used . ' not found by email, trying nf key');
+        // If not found by email, check for NF Key incase user updated their
+        // email.
+        $users = \Drupal::entityTypeManager()
+            ->getStorage('user')
+            ->loadByProperties([
+          'field_user_sso_nfkey' => explode('|', $userInfo['user_id'])[1],
+        ]);
+        $joinUser = $users ? reset($users) : FALSE;
+        if ($joinUser) {
+          $joinUser->setEmail($userInfo['email']);
+          $joinUser->save();
+        }
       }
     }
     else {
@@ -804,15 +854,12 @@ class AuthController extends ControllerBase {
   /**
    * Email not verified error message.
    *
-   * @param string $idToken
-   *   The id token.
-   *
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
    *   The redirect response.
    */
-  protected function auth0FailWithVerifyEmail($idToken) {
+  protected function auth0FailWithVerifyEmail() {
     $messageHtml = sprintf('<p>%s.</p>',
-      $this->t('Please verify your email and log in again')
+        $this->t('Please verify your email and log in again')
     );
 
     return $this->failLogin(Markup::create($messageHtml), 'Email not verified');
@@ -823,10 +870,10 @@ class AuthController extends ControllerBase {
    */
   protected function findAuth0User($id) {
     $auth0_user = $this->database->select('auth0_user', 'a')
-      ->fields('a', ['drupal_id'])
-      ->condition('auth0_id', $id, '=')
-      ->execute()
-      ->fetchAssoc();
+        ->fields('a', ['drupal_id'])
+        ->condition('auth0_id', $id, '=')
+        ->execute()
+        ->fetchAssoc();
 
     return empty($auth0_user) ? FALSE : $this->entityTypeManager()->getStorage('user')->load($auth0_user['drupal_id']);
   }
@@ -839,11 +886,11 @@ class AuthController extends ControllerBase {
    */
   protected function updateAuth0User(array $userInfo) {
     $this->database->update('auth0_user')
-      ->fields([
-        'auth0_object' => serialize($userInfo),
-      ])
-      ->condition('auth0_id', $userInfo['user_id'], '=')
-      ->execute();
+        ->fields([
+          'auth0_object' => serialize($userInfo),
+        ])
+        ->condition('auth0_id', $userInfo['user_id'], '=')
+        ->execute();
   }
 
   /**
@@ -854,7 +901,8 @@ class AuthController extends ControllerBase {
    * @param \Drupal\user\UserInterface $user
    *   The Drupal user entity.
    */
-  protected function auth0UpdateFieldsAndRoles(array $userInfo, UserInterface $user) {
+  protected function auth0UpdateFieldsAndRoles(array $userInfo,
+      UserInterface $user) {
 
     $edit = [];
     $this->auth0UpdateFields($userInfo, $user, $edit);
@@ -873,7 +921,8 @@ class AuthController extends ControllerBase {
    * @param array $edit
    *   The edit array.
    */
-  protected function auth0UpdateFields(array $userInfo, UserInterface $user, array &$edit) {
+  protected function auth0UpdateFields(array $userInfo, UserInterface $user,
+      array &$edit) {
     $auth0_claim_mapping = $this->config->get('auth0_claim_mapping');
 
     if (isset($auth0_claim_mapping) && !empty($auth0_claim_mapping)) {
@@ -924,12 +973,14 @@ class AuthController extends ControllerBase {
    * @param array $edit
    *   The edit array.
    */
-  protected function auth0UpdateRoles(array $userInfo, UserInterface $user, array &$edit) {
+  protected function auth0UpdateRoles(array $userInfo, UserInterface $user,
+      array &$edit) {
     $this->auth0Logger->notice("Mapping Roles");
     $auth0_claim_to_use_for_role = $this->config->get('auth0_claim_to_use_for_role');
 
     if (isset($auth0_claim_to_use_for_role) && !empty($auth0_claim_to_use_for_role)) {
-      $claim_value = isset($userInfo[$auth0_claim_to_use_for_role]) ? $userInfo[$auth0_claim_to_use_for_role] : '';
+      $claim_value = isset($userInfo[$auth0_claim_to_use_for_role]) ? $userInfo[$auth0_claim_to_use_for_role]
+            : '';
       $this->auth0Logger->notice('claim_value ' . print_r($claim_value, TRUE));
 
       $claim_values = [];
@@ -962,7 +1013,8 @@ class AuthController extends ControllerBase {
 
       $user_roles = $user->getRoles();
 
-      $new_user_roles = array_merge(array_diff($user_roles, $not_granted), $roles_granted);
+      $new_user_roles = array_merge(array_diff($user_roles, $not_granted),
+          $roles_granted);
 
       $roles_to_add = array_diff($new_user_roles, $user_roles);
       $roles_to_remove = array_diff($user_roles, $new_user_roles);
@@ -1035,8 +1087,8 @@ class AuthController extends ControllerBase {
    */
   protected function insertAuth0User(array $userInfo, $uid) {
     $this->database->insert('auth0_user')->fields([
-      'auth0_id' => $userInfo['user_id'],
-      'drupal_id' => $uid,
+      'auth0_id'     => $userInfo['user_id'],
+      'drupal_id'    => $uid,
       'auth0_object' => json_encode($userInfo),
     ])->execute();
   }
@@ -1053,7 +1105,7 @@ class AuthController extends ControllerBase {
    * @throws \Exception
    */
   private function getRandomBytes($nbBytes = 32) {
-    $bytes = openssl_random_pseudo_bytes($nbBytes, $strong);
+    $bytes = openssl_random_pseudo_bytes($nbBytes, TRUE);
     if (FALSE !== $bytes && TRUE === $strong) {
       return $bytes;
     }
@@ -1074,7 +1126,8 @@ class AuthController extends ControllerBase {
    * @throws \Exception
    */
   private function generatePassword($length) {
-    return substr(preg_replace("/[^a-zA-Z0-9]\+\//", "", base64_encode($this->getRandomBytes($length + 1))), 0, $length);
+    return substr(preg_replace("/[^a-zA-Z0-9]\+\//", "",
+            base64_encode($this->getRandomBytes($length + 1))), 0, $length);
   }
 
   /**
@@ -1107,9 +1160,8 @@ class AuthController extends ControllerBase {
     }
 
     // If the username already exists, create a new random one.
-    $username = !empty($userInfo[$user_name_claim])
-      ? $userInfo[$user_name_claim]
-      : $userInfo['user_id'];
+    $username = !empty($userInfo[$user_name_claim]) ? $userInfo[$user_name_claim]
+          : $userInfo['user_id'];
 
     if (user_load_by_name($username)) {
       $username .= time();
@@ -1143,11 +1195,11 @@ class AuthController extends ControllerBase {
     // Validate the ID Token.
 
     try {
-      $user = $this->auth0->decodeIdToken($idToken);
+      $user = $this->auth0->decode($idToken);
     }
     catch (\Exception $e) {
       return $this->failLogin($this->t('There was a problem resending the verification email, sorry for the inconvenience.'),
-        "Failed to verify and decode the JWT ($idToken) for the verify email page: " . $e->getMessage());
+              "Failed to verify and decode the JWT ($idToken) for the verify email page: " . $e->getMessage());
     }
 
     try {
@@ -1156,10 +1208,11 @@ class AuthController extends ControllerBase {
 
       $client = $this->httpClient;
 
-      $client->request('POST', $url, [
-        "headers" => [
-          "Authorization" => "Bearer $idToken",
-        ],
+      $client->request('POST', $url,
+          [
+            "headers" => [
+              "Authorization" => "Bearer $idToken",
+            ],
       ]);
       $this->messenger()->addStatus($this->t('An Authorization email was sent to your account.'));
     }
@@ -1172,5 +1225,4 @@ class AuthController extends ControllerBase {
 
     return new RedirectResponse('/');
   }
-
 }
