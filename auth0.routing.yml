@@ -14,7 +14,7 @@ auth0.legacy_login:
     _form: '\Drupal\user\Form\UserLoginForm'
     _title: 'Log in'
   requirements:
-    _access: 'TRUE'
+    _user_is_logged_in: 'FALSE'
   options:
     _maintenance_access: TRUE
 

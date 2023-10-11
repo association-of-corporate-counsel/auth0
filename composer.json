@@ -4,7 +4,9 @@
     "license": "MIT",
     "description": "Single Sign On for Enterprises + Social Login + User/Passwords. For all your Drupal instances. Powered by Auth0.",
     "require": {
-        "auth0/auth0-php": "7.9.2"
+        "auth0/auth0-php": "^8.6",
+        "nyholm/psr7": "^1.6",
+        "php-http/guzzle6-adapter": "^2.0"
     },
     "scripts": {
         "phpcs": "\"../../../vendor/bin/phpcs\" --standard=Drupal src",

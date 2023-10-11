@@ -6,20 +6,22 @@ namespace Drupal\auth0\Util;
  * @file
  * Contains \Drupal\auth0\Util\AuthHelper.
  */
-
 use Auth0\SDK\Auth0;
 use Auth0\SDK\Exception\InvalidTokenException;
-use Auth0\SDK\API\Authentication;
-use Auth0\SDK\API\Helpers\ApiClient;
-use Auth0\SDK\API\Helpers\InformationHeaders;
-
+///use Auth0\SDK\API\Authentication;
+///use Auth0\SDK\API\Helpers\ApiClient;
+///use Auth0\SDK\API\Helpers\InformationHeaders;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
+use Auth0\SDK\Configuration\SdkConfiguration;
+use Auth0\SDK\Token;
+use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
 
 /**
  * Controller routines for auth0 authentication.
  */
 class AuthHelper {
+
   const AUTH0_LOGGER = 'auth0_helper';
   const AUTH0_DOMAIN = 'auth0_domain';
   const AUTH0_CUSTOM_DOMAIN = 'auth0_custom_domain';
@@ -40,6 +42,7 @@ class AuthHelper {
   private $auth0JwtSignatureAlg;
   private $secretBase64Encoded;
   private $auth0;
+  private $httpClient;
 
   /**
    * Initialize the Helper.
@@ -50,8 +53,8 @@ class AuthHelper {
    *   The config factory.
    */
   public function __construct(
-    LoggerChannelFactoryInterface $logger_factory,
-    ConfigFactoryInterface $config_factory
+      LoggerChannelFactoryInterface $logger_factory,
+      ConfigFactoryInterface $config_factory
   ) {
     global $base_root;
 
@@ -63,21 +66,44 @@ class AuthHelper {
     $this->clientSecret = $this->config->get(AuthHelper::AUTH0_CLIENT_SECRET);
     $this->redirectForSso = $this->config->get(AuthHelper::AUTH0_REDIRECT_FOR_SSO);
     $this->auth0JwtSignatureAlg = $this->config->get(
-      AuthHelper::AUTH0_JWT_SIGNING_ALGORITHM,
-      AUTH0_DEFAULT_SIGNING_ALGORITHM
+        AuthHelper::AUTH0_JWT_SIGNING_ALGORITHM, AUTH0_DEFAULT_SIGNING_ALGORITHM
     );
     $this->secretBase64Encoded = FALSE || $this->config->get(AuthHelper::AUTH0_SECRET_ENCODED);
 
-    $this->auth0 = new Auth0([
-      'domain'                => $this->domain,
-      'client_id'             => $this->clientId,
-      'client_secret'         => $this->clientSecret,
-      'redirect_uri'          => "$base_root/auth0/callback",
-      'id_token_alg'          => $this->auth0JwtSignatureAlg,
-      'secret_base64_encoded' => $this->secretBase64Encoded,
-    ]);
+    $guzzleClient = \Drupal::httpClient();
 
-    self::setTelemetry();
+    $this->httpClient = new GuzzleAdapter($guzzleClient);
+
+    $sdk_configuration = new SdkConfiguration(
+        domain: $this->getAuthDomain(), clientId: $this->clientId,
+        clientSecret: $this->clientSecret,
+        redirectUri: "$base_root/auth0/callback", httpClient: $this->httpClient,
+        cookieSecret: $this->getCookieSecret(),
+        usePkce: FALSE,
+        /*
+          // Specify a PSR-18 HTTP client factory:
+          httpClient: $httpClient
+
+          // Specify PSR-17 request/response factories:
+          httpRequestFactory: $httpFactory
+          httpResponseFactory: $httpFactory
+          httpStreamFactory: $httpFactory */
+    );
+
+    $this->auth0 = new Auth0($sdk_configuration);
+  }
+
+  public function getCookieSecret() {
+    $cookieSecret = $this->config->get('auth0_cookie_secret');
+
+    if (empty($cookieSecret)) {
+      $cookieSecret = uniqid();
+      $config = \Drupal::configFactory()->getEditable('auth0.settings');
+      $config->set('auth0_cookie_secret', $cookieSecret);
+      $config->save();
+    }
+
+    return $cookieSecret;
   }
 
   /**
@@ -96,14 +122,13 @@ class AuthHelper {
   public function getUserUsingRefreshToken($refreshToken) {
     global $base_root;
 
-    $auth0Api = new Authentication($this->getAuthDomain(), $this->clientId, $this->clientSecret);
-
+    $auth0Api = $this->auth0->authentication();
     try {
-      $tokens = $auth0Api->oauth_token([
-        'grant_type'    => 'refresh_token',
-        'client_id'     => $this->clientId,
-        'client_secret' => $this->clientSecret,
-        'refresh_token' => $refreshToken,
+      $tokens = $auth0Api->oauthToken([
+        'grantType'    => 'refresh_token',
+        'clientId'     => $this->clientId,
+        'clientSecret' => $this->clientSecret,
+        'refreshToken' => $refreshToken,
       ]);
 
       return $this->validateIdToken($tokens->idToken);
@@ -126,18 +151,10 @@ class AuthHelper {
    * @throws \Exception
    */
   public function validateIdToken(string $idToken): array {
-    return $this->auth0->decodeIdToken($idToken);
-  }
+    $decoded = $this->auth0->decode($idToken);
 
-  /**
-   * Extend Auth0 PHP SDK telemetry to report for Drupal.
-   */
-  public static function setTelemetry() {
-    $oldInfoHeaders = ApiClient::getInfoHeadersData();
-    if ($oldInfoHeaders) {
-      $infoHeaders = InformationHeaders::Extend($oldInfoHeaders);
-      $infoHeaders->setPackage('auth0-drupal', AUTH0_MODULE_VERSION);
-      ApiClient::setInfoHeadersData($infoHeaders);
+    if ($decoded) {
+      return $decoded->toArray();
     }
   }
 
@@ -162,10 +179,10 @@ class AuthHelper {
    *   Tenant CDN base URL
    */
   public static function getTenantCdn($domain) {
-    preg_match('/^[\w\d\-_0-9]+\.([\w\d\-_0-9]*)[\.]*auth0\.com$/', $domain, $matches);
+    preg_match('/^[\w\d\-_0-9]+\.([\w\d\-_0-9]*)[\.]*auth0\.com$/', $domain,
+        $matches);
     return 'https://cdn' .
-      (empty($matches[1]) || $matches[1] == 'us' ? '' : '.' . $matches[1])
-      . '.auth0.com';
+        (empty($matches[1]) || $matches[1] == 'us' ? '' : '.' . $matches[1])
+        . '.auth0.com';
   }
-
 }
