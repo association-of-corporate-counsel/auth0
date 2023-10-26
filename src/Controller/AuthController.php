@@ -2,16 +2,19 @@
 
 namespace Drupal\auth0\Controller;
 
+use Drupal\Core\Extension\ExtensionPathResolver;
+
 /**
  * @file
  * Contains \Drupal\auth0\Controller\AuthController.
  */
 // Create a variable to store the path to this module.
 // Load vendor files if they exist.
-define('AUTH0_PATH', drupal_get_path('module', 'auth0'));
+$module_path = \Drupal::moduleHandler()->getModule('auth0_drupal')->getPath();
+require_once $module_path . '/vendor/autoload.php';
 
-if (file_exists(AUTH0_PATH . '/vendor/autoload.php')) {
-  require_once AUTH0_PATH . '/vendor/autoload.php';
+if (file_exists($module_path . '/vendor/autoload.php')) {
+  require_once $module_path . '/vendor/autoload.php';
 }
 
 use Drupal\Core\Controller\ControllerBase;
