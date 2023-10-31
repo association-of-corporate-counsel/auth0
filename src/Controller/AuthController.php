@@ -45,7 +45,7 @@ use Auth0\SDK\Configuration\SdkConfiguration;
 use Auth0\SDK\Store\CookieStore;
 use GuzzleHttp\Client;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
+use Http\Adapter\Guzzle7\Client as GuzzleAdapter;
 
 /**
  * Controller routines for auth0 authentication.

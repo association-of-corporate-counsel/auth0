@@ -15,7 +15,7 @@ use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Auth0\SDK\Configuration\SdkConfiguration;
 use Auth0\SDK\Token;
-use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
+use Http\Adapter\Guzzle7\Client as GuzzleAdapter;
 
 /**
  * Controller routines for auth0 authentication.
