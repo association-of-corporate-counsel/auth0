@@ -11,7 +11,6 @@ use Drupal\Core\Extension\ExtensionPathResolver;
 // Create a variable to store the path to this module.
 // Load vendor files if they exist.
 $module_path = \Drupal::moduleHandler()->getModule('auth0')->getPath();
-require_once $module_path . '/vendor/autoload.php';
 
 if (file_exists($module_path . '/vendor/autoload.php')) {
   require_once $module_path . '/vendor/autoload.php';
