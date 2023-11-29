@@ -804,18 +804,23 @@ class AuthController extends ControllerBase {
         $joinUser = user_load_by_mail($userInfo['email']);
       }
       if (!$joinUser) {
-        $this->auth0Logger->notice($user_name_used . ' not found by email, trying nf key');
-        // If not found by email, check for NF Key incase user updated their
-        // email.
-        $users = \Drupal::entityTypeManager()
-            ->getStorage('user')
-            ->loadByProperties([
-          'field_user_sso_nfkey' => explode('|', $userInfo['user_id'])[1],
-        ]);
-        $joinUser = $users ? reset($users) : FALSE;
-        if ($joinUser) {
-          $joinUser->setEmail($userInfo['email']);
-          $joinUser->save();
+        $user1 = \Drupal::entityTypeManager()
+                ->getStorage('user')->load(1);
+
+        if ($user1 && $user1->hasField('field_user_sso_nfkey')) {
+          $this->auth0Logger->notice($user_name_used . ' not found by email, trying nf key');
+          // If not found by email, check for NF Key incase user updated their
+          // email.
+          $users = \Drupal::entityTypeManager()
+              ->getStorage('user')
+              ->loadByProperties([
+            'field_user_sso_nfkey' => explode('|', $userInfo['user_id'])[1],
+          ]);
+          $joinUser = $users ? reset($users) : FALSE;
+          if ($joinUser) {
+            $joinUser->setEmail($userInfo['email']);
+            $joinUser->save();
+          }
         }
       }
     }
@@ -1105,7 +1110,7 @@ class AuthController extends ControllerBase {
    * @throws \Exception
    */
   private function getRandomBytes($nbBytes = 32) {
-    $bytes = openssl_random_pseudo_bytes($nbBytes, TRUE);
+    $bytes = openssl_random_pseudo_bytes($nbBytes, $strong);
     if (FALSE !== $bytes && TRUE === $strong) {
       return $bytes;
     }
